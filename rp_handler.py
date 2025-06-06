@@ -1,30 +1,41 @@
+import json
 import os
 import base64
-import time
+from pathlib import Path
+import mimetypes
 import traceback
+from typing import List
 import uuid
 import torch
 import tempfile
 import requests
 import numpy as np
 
-from diffusers import AutoencoderKLWan, WanImageToVideoPipeline
-from diffusers.utils import export_to_video, load_image
-from transformers import CLIPVisionModel
+from comfyui import ComfyUI
+from dataclasses import dataclass
+
 from huggingface_hub import hf_hub_download
 
 import runpod
-from runpod.serverless.utils.rp_validator import validate
+from runpod.serverless.utils.rp_validator import validate 
 from runpod.serverless.utils.rp_download import file
 from runpod.serverless.modules.rp_logger import RunPodLogger
+import random
 
 from styles import STYLE_URLS, STYLE_NAMES  # ваши словари
 
+OUTPUT_DIR = "/results"
+INPUT_DIR = "/job_files"
+COMFYUI_TEMP_OUTPUT_DIR = "ComfyUI/temp"
+COMFYUI_LORAS_DIR = "ComfyUI/models/loras"
+ALL_DIRECTORIES = [OUTPUT_DIR, INPUT_DIR, COMFYUI_TEMP_OUTPUT_DIR]
+
+mimetypes.add_type("image/webp", ".webp")
+api_json_file = "workflow.json"
 
 # -------------------------------------------------------------
 #  Схема входных данных для валидации
 # -------------------------------------------------------------
-
 
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -44,40 +55,21 @@ def calculate_frames(duration, frame_rate):
 
 class Predictor():
     def setup(self):
-        """ 
-        Загружаем CLIPVisionModel, VAE и сам WanImageToVideoPipeline. 
-        Вызывается один раз перед первым predict.
-        """
-        try:
-            self.image_encoder = CLIPVisionModel.from_pretrained(
-                model_id,
-                subfolder="image_encoder",
-                cache_dir=cache,
-                torch_dtype=torch.float32
-            )
-            self.vae = AutoencoderKLWan.from_pretrained(
-                model_id, subfolder="vae",
-                cache_dir=cache,
-                torch_dtype=torch.float32
-            )
-            self.pipe = WanImageToVideoPipeline.from_pretrained(
-                model_id,
-                vae=self.vae,
-                cache_dir=cache,
-                image_encoder=self.image_encoder,
-                torch_dtype=torch.bfloat16
-            ).to(device)
-            self.pipe.enable_model_cpu_offload()
+        self.comfyUI = ComfyUI("127.0.0.1:8188")
+        self.comfyUI.start_server(OUTPUT_DIR, INPUT_DIR)
 
-            self.vae_scale_factor_spatial  = self.pipe.vae_scale_factor_spatial
-            self.vae_scale_factor_temporal = self.pipe.vae_scale_factor_temporal
-            
-            # Загрузим LoRA по умолчанию, если он есть
-            self.pipe.load_lora_weights(CURRENT_LORA_NAME, multiplier=1.0)
-            print(f"Model loaded. VAE scales: spatial={self.vae_scale_factor_spatial}, temporal={self.vae_scale_factor_temporal}")
-        except Exception as e:
-            print("Error loading pipeline:", str(e))
-            raise RuntimeError(f"Failed to load pipeline: {str(e)}")
+        os.makedirs("ComfyUI/models/loras", exist_ok=True)
+
+        with open(api_json_file, "r") as file:
+            workflow = json.loads(file.read()) 
+        self.comfyUI.handle_weights(
+            workflow,
+            weights_to_download=[
+                "wan_2.1_vae.safetensors",
+                "umt5_xxl_fp16.safetensors",
+                "clip_vision_h.safetensors",
+            ],
+        )
 
     def _get_local_lora_path(self, lora_style: str) -> str:
         """
@@ -255,6 +247,188 @@ class Predictor():
         os.remove(local_video_path)
         return video_b64
 
+    def filename_with_extension(self, input_file, prefix):
+        extension = os.path.splitext(input_file.name)[1]
+        return f"{prefix}{extension}"
+
+    def update_workflow(self, workflow, **kwargs):
+        is_image_to_video = kwargs["image_filename"] is not None
+        model = f"{kwargs['model']}-i2v-{kwargs['resolution']}" if is_image_to_video else kwargs["model"]
+
+        workflow["37"]["inputs"]["unet_name"] = "wan2.1_i2v_480p_14B_bf16.safetensors"
+
+        positive_prompt = workflow["6"]["inputs"]
+        positive_prompt["text"] = kwargs["prompt"]
+
+        negative_prompt = workflow["7"]["inputs"]
+        negative_prompt["text"] = f"nsfw, {kwargs['negative_prompt']}"
+
+        sampler = workflow["3"]["inputs"]
+        sampler["seed"] = kwargs["seed"]
+        sampler["cfg"] = kwargs["sample_guide_scale"]
+        sampler["steps"] = kwargs["sample_steps"]
+
+        shift = workflow["48"]["inputs"]
+        shift["shift"] = kwargs["sample_shift"]
+
+        if is_image_to_video:
+            del workflow["40"]
+            wan_i2v_latent = workflow["58"]["inputs"]
+            wan_i2v_latent["length"] = kwargs["frames"]
+
+            image_loader = workflow["55"]["inputs"]
+            image_loader["image"] = kwargs["image_filename"]
+
+            image_resizer = workflow["56"]["inputs"]
+            if kwargs["resolution"] == "720p":
+                image_resizer["target_size"] = 1008
+            else:
+                image_resizer["target_size"] = 644
+
+        else:
+            del workflow["55"]
+            del workflow["56"]
+            del workflow["57"]
+            del workflow["58"]
+            del workflow["59"]
+            del workflow["60"]
+            width, height = self.get_width_and_height(
+                kwargs["resolution"], kwargs["aspect_ratio"]
+            )
+            empty_latent_video = workflow["40"]["inputs"]
+            empty_latent_video["length"] = kwargs["frames"]
+            empty_latent_video["width"] = width
+            empty_latent_video["height"] = height
+
+            sampler["model"] = ["48", 0]
+            sampler["positive"] = ["6", 0]
+            sampler["negative"] = ["7", 0]
+            sampler["latent_image"] = ["40", 0]
+
+        thresholds = {
+            "14b": {
+                "Balanced": 0.15,
+                "Fast": 0.2,
+                "coefficients": "14B",
+            },
+            "14b-i2v-480p": {
+                "Balanced": 0.19,
+                "Fast": 0.26,
+                "coefficients": "i2v_480",
+            },
+            "14b-i2v-720p": {
+                "Balanced": 0.2,
+                "Fast": 0.3,
+                "coefficients": "i2v_720",
+            },
+            "1.3b": {
+                "Balanced": 0.07,
+                "Fast": 0.08,
+                "coefficients": "1.3B",
+            },
+        }
+
+        fast_mode = kwargs["fast_mode"]
+        if fast_mode == "Off":
+            # Turn off tea cache
+            del workflow["54"]
+            workflow["49"]["inputs"]["model"] = ["37", 0]
+        else:
+            tea_cache = workflow["54"]["inputs"]
+            tea_cache["coefficients"] = thresholds[model]["coefficients"]
+            tea_cache["rel_l1_thresh"] = thresholds[model][fast_mode]
+
+        if kwargs["lora_url"] or kwargs["lora_filename"]:
+            lora_loader = workflow["49"]["inputs"]
+            if kwargs["lora_filename"]:
+                lora_loader["lora_name"] = kwargs["lora_filename"]
+            elif kwargs["lora_url"]:
+                lora_loader["lora_name"] = kwargs["lora_url"]
+
+            lora_loader["strength_model"] = kwargs["lora_strength_model"]
+            lora_loader["strength_clip"] = kwargs["lora_strength_clip"]
+        else:
+            del workflow["49"]  # delete lora loader node
+            positive_prompt["clip"] = ["38", 0]
+            shift["model"] = ["37", 0] if fast_mode == "Off" else ["54", 0]
+
+    def generate(
+        self,
+        prompt: str,
+        negative_prompt: str | None = None,
+        image: Path | None = None,
+        aspect_ratio: str = "16:9",
+        frames: int = 81,
+        model: str | None = None,
+        lora_style: str | None = None,
+        lora_strength_model: float = 1.0,
+        lora_strength_clip: float = 1.0,
+        fast_mode: str = "Balanced",
+        sample_shift: float = 8.0,
+        sample_guide_scale: float = 5.0,
+        sample_steps: int = 30,
+        seed: int | None = None,
+    ) -> List[Path]:
+        self.comfyUI.cleanup(ALL_DIRECTORIES)
+        if seed is None:
+            seed = random.randint(0, 2**32 - 1)
+
+        image_filename = self.filename_with_extension(image, "image")
+
+        lora_filename = STYLE_NAMES.get(lora_style)
+        lora_path = f"{COMFYUI_LORAS_DIR}/{lora_filename}" if lora_filename else None
+        inferred_model_type = "14b"
+        
+        
+        elif lora_url:
+            if m := re.match(
+                r"^(?:https?://replicate.com/)?([^/]+)/([^/]+)/?$", lora_url
+            ):
+                owner, model_name = m.groups()
+                lora_filename, inferred_model_type = download_replicate_weights(
+                    f"https://replicate.com/{owner}/{model_name}/_weights",
+                    COMFYUI_LORAS_DIR,
+                )
+            elif lora_url.startswith("https://replicate.delivery"):
+                lora_filename, inferred_model_type = download_replicate_weights(
+                    lora_url, COMFYUI_LORAS_DIR
+                )
+
+            if inferred_model_type and inferred_model_type != model:
+                print(
+                    f"Warning: Model type mismatch between requested model ({model}) and inferred model type ({inferred_model_type}). Using {inferred_model_type}."
+                )
+                model = inferred_model_type
+
+        with open(api_json_file, "r") as file:
+            workflow = json.loads(file.read())
+
+        self.update_workflow(
+            workflow,
+            prompt=prompt,
+            negative_prompt=negative_prompt,
+            seed=seed,
+            fast_mode=fast_mode,
+            sample_shift=sample_shift,
+            sample_guide_scale=sample_guide_scale,
+            sample_steps=sample_steps,
+            model=model,
+            frames=frames,
+            aspect_ratio=aspect_ratio,
+            lora_filename=lora_filename,
+            # lora_url=lora_url,
+            lora_strength_model=lora_strength_model,
+            lora_strength_clip=lora_strength_clip,
+            resolution="480p",
+            image_filename=image_filename
+        )
+
+        wf = self.comfyUI.load_workflow(workflow)
+        self.comfyUI.connect()
+        self.comfyUI.run_workflow(wf)
+
+        return self.comfyUI.get_files(OUTPUT_DIR, file_extensions=["mp4"])
+
 
 # -------------------------------------------------------------
 #  RunPod Handler
@@ -279,32 +453,54 @@ def handler(job):
         # Скачиваем входное изображение
         image_url = payload["image_url"]
         image_obj = file(image_url)
-        image_path = image_obj["file_path"]
+        image_path = Path(image_obj["file_path"])
 
-        prompt              = payload["prompt"]
-        negative_prompt     = payload.get("negative_prompt", "")
-        lora_style          = payload.get("lora_style", None)
-        lora_strength       = payload.get("lora_strength", 1.0)
-        duration            = payload.get("duration", 3.0)
-        fps                 = payload.get("fps", 16)
-        guidance_scale      = payload.get("guidance_scale", 5.0)
+        prompt = payload["prompt"]
+        negative_prompt = payload.get("negative_prompt", "")
+        lora_style = payload.get("lora_style", None)
+        aspect_ratio = payload.get("aspect_ratio", "16:9")
+        frames = payload.get("frames", 81)
+        model = payload.get("model", "14b-i2v-480p")
+        resolution = payload.get("resolution", "480p")
+        lora_strength_clip = payload.get("lora_strength_clip", 1.0)
+        fast_mode = payload.get("fast_mode", "Balanced")
         num_inference_steps = payload.get("num_inference_steps", 28)
-        resize_mode         = payload.get("resize_mode", "auto")
-        seed                = payload.get("seed", None)
+        guidance_scale = payload.get("guidance_scale", 5.0)
+        sample_shift = payload.get("sample_shift", 8.0)
+        lora_strength = payload.get("lora_strength", 1.0)
+        duration = payload.get("duration", 3.0)
+        fps = payload.get("fps", 16)
+        resize_mode = payload.get("resize_mode", "auto")
+        seed = payload.get("seed", None)
 
-        video_b64 = predictor.predict(
-            image=image_path,
+        video_b64 = predictor.generate(
             prompt=prompt,
             negative_prompt=negative_prompt,
+            image=image_path,
+            aspect_ratio=aspect_ratio,
+            frames=frames,
+            model=model,
             lora_style=lora_style,
-            lora_strength=lora_strength,
-            duration=duration,
-            fps=fps,
-            guidance_scale=guidance_scale,
-            num_inference_steps=num_inference_steps,
-            resize_mode=resize_mode,
-            seed=seed
+            lora_strength_clip=lora_strength_clip,
+            fast_mode=fast_mode,
+            sample_shift=sample_shift,
+            sample_guide_scale=guidance_scale,
+            sample_steps=num_inference_steps,
+            resolution=resolution,
         )
+        # video_b64 = predictor.predict(
+        #     image=image_path,
+        #     prompt=prompt,
+        #     negative_prompt=negative_prompt,
+        #     lora_style=lora_style,
+        #     lora_strength=lora_strength,
+        #     duration=duration,
+        #     fps=fps,
+        #     guidance_scale=guidance_scale,
+        #     num_inference_steps=num_inference_steps,
+        #     resize_mode=resize_mode,
+        #     seed=seed
+        # )
 
         return {"video_base64": video_b64}
 
