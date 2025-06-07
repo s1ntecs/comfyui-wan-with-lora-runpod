@@ -4,20 +4,11 @@ import base64
 from pathlib import Path
 import mimetypes
 import traceback
-from typing import List
-import uuid
 import torch
-import tempfile
-import requests
-import numpy as np
 
 from comfyui import ComfyUI
-from dataclasses import dataclass
-
-from huggingface_hub import hf_hub_download
 
 import runpod
-from runpod.serverless.utils.rp_validator import validate 
 from runpod.serverless.utils.rp_download import file
 from runpod.serverless.modules.rp_logger import RunPodLogger
 import random
@@ -46,13 +37,6 @@ MODEL_FRAME_RATE = 16
 # Будем хранить текущий активный стиль и путь
 CURRENT_LORA_NAME = "./loras/wan_SmNmRmC.safetensors"
 
-
-def calculate_frames(duration, frame_rate):
-    raw_frames = round(duration * frame_rate)
-    nearest_multiple_of_4 = round(raw_frames / 4) * 4
-    return min(nearest_multiple_of_4 + 1, 81)
-
-
 class Predictor():
     def setup(self):
         self.comfyUI = ComfyUI("127.0.0.1:8188")
@@ -70,6 +54,21 @@ class Predictor():
                 "clip_vision_h.safetensors",
             ],
         )
+
+    def get_width_and_height(self, resolution: str, aspect_ratio: str):
+        sizes = {
+            "480p": {
+                "16:9": (832, 480),
+                "9:16": (480, 832),
+                "1:1": (644, 644),
+            },
+            "720p": {
+                "16:9": (1280, 720),
+                "9:16": (720, 1280),
+                "1:1": (980, 980),
+            },
+        }
+        return sizes[resolution][aspect_ratio]
 
     def _get_local_lora_path(self, lora_style: str) -> str:
         """
@@ -91,177 +90,22 @@ class Predictor():
             return local_path
         return None
 
-    def _download_lora_if_needed(self, lora_style: str) -> str:
-        """
-        Если у нас уже есть локально — вернём путь.
-        Если нет и есть ссылка в STYLE_URLS — скачиваем в ./loras/ и вернём путь.
-        """
-        # 1) Узнаём файл по ключу
-        filename = STYLE_NAMES.get(lora_style)
-        if filename is None:
-            raise RuntimeError(f"Unknown LORA style: {lora_style}")
-
-        target_dir = "./loras"
-        os.makedirs(target_dir, exist_ok=True)
-        local_path = os.path.join(target_dir, filename)
-
-        # Если файл уже скачан — сразу возвращаем
-        if os.path.isfile(local_path):
-            return local_path
-
-        # Иначе — скачиваем по URL
-        url = STYLE_URLS.get(lora_style)
-        if url is None:
-            raise RuntimeError(f"No URL found for LORA style: {lora_style}")
-
-        print(f"Downloading LoRA '{lora_style}' from {url} into {local_path} ...")
-        # Если ссылка ведёт на HF «blob»-вид, нужно чуть подправить URL, чтобы его можно было прям скачать raw
-        if "huggingface.co" in url and "/blob/" in url:
-            url = url.replace("/blob/", "/resolve/")
-        resp = requests.get(url)
-        if resp.status_code != 200:
-            raise RuntimeError(f"Failed to download LORA from {url}: HTTP {resp.status_code}")
-
-        with open(local_path, "wb") as f:
-            f.write(resp.content)
-
-        print(f"Successfully saved LoRA to {local_path}")
-        return local_path
-
-    def load_lora(self, lora_style: str, lora_strength: float = 1.0):
-        """
-        Верхнеуровневая функция «установки» LoRA:
-          - Проверяем, меняется ли стиль (global CURRENT_LORA_STYLE).
-          - Если нет, то выходим (уже загружен нужный).
-          - Если да, то вызываем pipe.unload_lora_weights(), скачиваем/загружаем новую.
-        """
-        global CURRENT_LORA_NAME
-
-        # Если стиль не передан — ничего не делаем
-        if not lora_style:
-            return
-
-        # Скачиваем (или берём локальный) нужный файл
-        local_path = self._download_lora_if_needed(lora_style)
-
-         # Если стиль не поменялся — нет смысла перезагрузки
-        if CURRENT_LORA_NAME == local_path:
-            return
-
-        try:
-            self.pipe.unload_lora_weights()
-        except Exception:
-            # возможно, раньше pipe был без LoRA, пропускаем
-            pass
-        # Устанавливаем через diffusers
-        print(f"Loading LoRA weights from local_path = {local_path} (style={lora_style}, strength={lora_strength})")
-        self.pipe.load_lora_weights(local_path, multiplier=lora_strength)
-        print("LoRA applied.")
-
-        # Обновляем глобальное состояние
-        CURRENT_LORA_NAME = local_path
-
-    def predict(
-        self,
-        image: str,
-        prompt: str,
-        negative_prompt: str = "low quality, bad quality, blurry, pixelated, watermark",
-        lora_style: str = None,
-        lora_strength: float = 1.0,
-        duration: float = 3.0,
-        fps: int = 16,
-        guidance_scale: float = 5.0,
-        num_inference_steps: int = 28,
-        resize_mode: str = "auto",
-        seed: int = None
-    ) -> str:
-        """
-        Запускаем генерацию видео и возвращаем Base64.
-        """
-        # 1) Обновляем LoRA (если передан стиль)
-        if lora_style:
-            self.load_lora(lora_style, lora_strength)
-
-        # 2) Рассчитываем количество кадров
-        num_frames = calculate_frames(duration, MODEL_FRAME_RATE)
-
-        # 3) Собираем генератор
-        if seed is not None:
-            torch.manual_seed(seed)
-            generator = torch.Generator(device=device).manual_seed(seed)
-        else:
-            seed = np.random.randint(0, 2**30)
-            generator = torch.Generator(device=device).manual_seed(seed)
-
-        # 4) Загружаем изображение
-        try:
-            input_image = load_image(str(image))
-        except Exception as e:
-            raise RuntimeError(f"Failed to load input image: {str(e)}")
-
-        # 5) Считаем размеры (аналогично ранее)
-        mod_value = self.vae_scale_factor_spatial * self.pipe.transformer.config.patch_size[1]
-        if resize_mode == "fixed_square":
-            width = height = 512
-        else:
-            if resize_mode == "auto":
-                aspect_ratio = input_image.height / input_image.width
-                if 0.9 <= aspect_ratio <= 1.1:
-                    width = height = 512
-                else:
-                    resize_mode = "keep_aspect_ratio"
-            if resize_mode == "keep_aspect_ratio":
-                max_area = 480 * 832
-                aspect_ratio = input_image.height / input_image.width
-                height = round(np.sqrt(max_area * aspect_ratio)) // mod_value * mod_value
-                width  = round(np.sqrt(max_area / aspect_ratio)) // mod_value * mod_value
-
-        # Гарантируем, что делится на 16
-        if height % 16 != 0 or width % 16 != 0:
-            height = (height // 16) * 16
-            width  = (width  // 16) * 16
-
-        input_image = input_image.resize((width, height))
-
-        # 6) Генерируем кадры
-        output = self.pipe(
-            image=input_image,
-            prompt=prompt,
-            negative_prompt=negative_prompt,
-            height=height,
-            width=width,
-            num_frames=num_frames,
-            guidance_scale=guidance_scale,
-            num_inference_steps=num_inference_steps,
-            generator=generator
-        ).frames[0]
-
-        # 7) Сохраняем в MP4 и кодируем в Base64
-        local_video_path = tempfile.mkdtemp() + "/" + str(uuid.uuid4()) + ".mp4"
-        export_to_video(output, str(local_video_path), fps=fps)
-
-        with open(local_video_path, "rb") as f:
-            video_bytes = f.read()
-        video_b64 = base64.b64encode(video_bytes).decode("utf-8")
-
-        os.remove(local_video_path)
-        return video_b64
-
     def filename_with_extension(self, input_file, prefix):
         extension = os.path.splitext(input_file.name)[1]
         return f"{prefix}{extension}"
 
     def update_workflow(self, workflow, **kwargs):
         is_image_to_video = kwargs["image_filename"] is not None
-        model = f"{kwargs['model']}-i2v-{kwargs['resolution']}" if is_image_to_video else kwargs["model"]
-
+        model = "14b-i2v-480p"  # kwargs['model']
+        # "14b-i2v-480p"
         workflow["37"]["inputs"]["unet_name"] = "wan2.1_i2v_480p_14B_bf16.safetensors"
 
         positive_prompt = workflow["6"]["inputs"]
         positive_prompt["text"] = kwargs["prompt"]
 
         negative_prompt = workflow["7"]["inputs"]
-        negative_prompt["text"] = f"nsfw, {kwargs['negative_prompt']}"
+        neg = kwargs.get("negative_prompt") or ""
+        negative_prompt["text"] = f"nsfw{', ' + neg if neg else ''}"
 
         sampler = workflow["3"]["inputs"]
         sampler["seed"] = kwargs["seed"]
@@ -338,7 +182,7 @@ class Predictor():
             tea_cache["coefficients"] = thresholds[model]["coefficients"]
             tea_cache["rel_l1_thresh"] = thresholds[model][fast_mode]
 
-        if kwargs["lora_url"] or kwargs["lora_filename"]:
+        if kwargs["lora_filename"]:
             lora_loader = workflow["49"]["inputs"]
             if kwargs["lora_filename"]:
                 lora_loader["lora_name"] = kwargs["lora_filename"]
@@ -356,7 +200,7 @@ class Predictor():
         self,
         prompt: str,
         negative_prompt: str | None = None,
-        image: Path | None = None,
+        image_url: str | None = None,
         aspect_ratio: str = "16:9",
         frames: int = 81,
         model: str | None = None,
@@ -368,38 +212,21 @@ class Predictor():
         sample_guide_scale: float = 5.0,
         sample_steps: int = 30,
         seed: int | None = None,
-    ) -> List[Path]:
+    ) -> str:
         self.comfyUI.cleanup(ALL_DIRECTORIES)
+        
+        image_obj = file(image_url)
+        image_path = Path(image_obj["file_path"])
+        
         if seed is None:
             seed = random.randint(0, 2**32 - 1)
 
-        image_filename = self.filename_with_extension(image, "image")
+        # Правильно — передаём Path-объект, у него есть .name
+        image_filename = self.filename_with_extension(image_path, "image")
 
         lora_filename = STYLE_NAMES.get(lora_style)
-        lora_path = f"{COMFYUI_LORAS_DIR}/{lora_filename}" if lora_filename else None
-        inferred_model_type = "14b"
-        
-        
-        elif lora_url:
-            if m := re.match(
-                r"^(?:https?://replicate.com/)?([^/]+)/([^/]+)/?$", lora_url
-            ):
-                owner, model_name = m.groups()
-                lora_filename, inferred_model_type = download_replicate_weights(
-                    f"https://replicate.com/{owner}/{model_name}/_weights",
-                    COMFYUI_LORAS_DIR,
-                )
-            elif lora_url.startswith("https://replicate.delivery"):
-                lora_filename, inferred_model_type = download_replicate_weights(
-                    lora_url, COMFYUI_LORAS_DIR
-                )
-
-            if inferred_model_type and inferred_model_type != model:
-                print(
-                    f"Warning: Model type mismatch between requested model ({model}) and inferred model type ({inferred_model_type}). Using {inferred_model_type}."
-                )
-                model = inferred_model_type
-
+        # lora_path = f"{COMFYUI_LORAS_DIR}/{lora_filename}" if lora_filename else None
+        # inferred_model_type = "14b"
         with open(api_json_file, "r") as file:
             workflow = json.loads(file.read())
 
@@ -416,7 +243,6 @@ class Predictor():
             frames=frames,
             aspect_ratio=aspect_ratio,
             lora_filename=lora_filename,
-            # lora_url=lora_url,
             lora_strength_model=lora_strength_model,
             lora_strength_clip=lora_strength_clip,
             resolution="480p",
@@ -427,13 +253,17 @@ class Predictor():
         self.comfyUI.connect()
         self.comfyUI.run_workflow(wf)
 
-        return self.comfyUI.get_files(OUTPUT_DIR, file_extensions=["mp4"])
-
-
+        files =  self.comfyUI.get_files(OUTPUT_DIR, file_extensions=["mp4"])
+        with open(files[0], "rb") as f:
+            video_bytes = f.read()
+        video_b64 = base64.b64encode(video_bytes).decode("utf-8")
+        return video_b64
 # -------------------------------------------------------------
 #  RunPod Handler
 # -------------------------------------------------------------
 logger = RunPodLogger()
+
+predictor = None
 
 if torch.cuda.is_available():
     print("Current CUDA device:", torch.cuda.current_device())
@@ -452,8 +282,7 @@ def handler(job):
 
         # Скачиваем входное изображение
         image_url = payload["image_url"]
-        image_obj = file(image_url)
-        image_path = Path(image_obj["file_path"])
+        
 
         prompt = payload["prompt"]
         negative_prompt = payload.get("negative_prompt", "")
@@ -468,39 +297,24 @@ def handler(job):
         guidance_scale = payload.get("guidance_scale", 5.0)
         sample_shift = payload.get("sample_shift", 8.0)
         lora_strength = payload.get("lora_strength", 1.0)
-        duration = payload.get("duration", 3.0)
-        fps = payload.get("fps", 16)
-        resize_mode = payload.get("resize_mode", "auto")
         seed = payload.get("seed", None)
 
         video_b64 = predictor.generate(
             prompt=prompt,
             negative_prompt=negative_prompt,
-            image=image_path,
+            image_url=image_url,
             aspect_ratio=aspect_ratio,
             frames=frames,
             model=model,
             lora_style=lora_style,
+            lora_strength_model=lora_strength,
             lora_strength_clip=lora_strength_clip,
             fast_mode=fast_mode,
             sample_shift=sample_shift,
             sample_guide_scale=guidance_scale,
             sample_steps=num_inference_steps,
-            resolution=resolution,
+            seed=seed,
         )
-        # video_b64 = predictor.predict(
-        #     image=image_path,
-        #     prompt=prompt,
-        #     negative_prompt=negative_prompt,
-        #     lora_style=lora_style,
-        #     lora_strength=lora_strength,
-        #     duration=duration,
-        #     fps=fps,
-        #     guidance_scale=guidance_scale,
-        #     num_inference_steps=num_inference_steps,
-        #     resize_mode=resize_mode,
-        #     seed=seed
-        # )
 
         return {"video_base64": video_b64}
 

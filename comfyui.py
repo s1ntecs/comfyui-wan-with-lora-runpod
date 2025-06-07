@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import urllib.request
 import subprocess
 import threading
@@ -343,16 +344,16 @@ class ComfyUI:
             for f in os.listdir(directory):
                 if f == "__MACOSX":
                     continue
-                path = os.path.join(directory, f)
+                path = Path(os.path.join(directory, f))
                 if os.path.isfile(path):
                     print(f"{prefix}{f}")
-                    files.append(Path(path))
+                    files.append(path)
                 elif os.path.isdir(path):
                     print(f"{prefix}{f}/")
                     files.extend(self.get_files(path, prefix=f"{prefix}{f}/"))
 
         if file_extensions:
-            files = [f for f in files if f.name.split(".")[-1] in file_extensions]
+            files: list[Path] = [f for f in files if f.name.split(".")[-1] in file_extensions]
 
         return sorted(files)
 

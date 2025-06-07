@@ -50,7 +50,7 @@ def download_loras():
             local_path = hf_hub_download(
                 repo_id=repo_id,
                 filename=filename,
-                local_dir="./loras"
+                local_dir="./ComfyUI/models/loras"
             )
             downloaded_paths.append(local_path)
         except Exception as e:
@@ -62,3 +62,4 @@ def download_loras():
 
 if __name__ == "__main__":
     download_wan_files()
+    download_loras()
