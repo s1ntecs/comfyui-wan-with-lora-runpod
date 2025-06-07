@@ -36,7 +36,7 @@ MODEL_FRAME_RATE = 16
 
 # Будем хранить текущий активный стиль и путь
 CURRENT_LORA_NAME = "./loras/wan_SmNmRmC.safetensors"
-
+logger = RunPodLogger()
 class Predictor():
     def setup(self):
         self.comfyUI = ComfyUI("127.0.0.1:8188")
@@ -222,8 +222,10 @@ class Predictor():
             seed = random.randint(0, 2**32 - 1)
 
         # Правильно — передаём Path-объект, у него есть .name
-        image_filename = self.filename_with_extension(image_path, "image")
-
+        # image_filename = self.filename_with_extension(image_path, "image")
+        image_filename = image_path.name
+        logger.info(f"Image filename: {image_filename}")
+        
         lora_filename = STYLE_NAMES.get(lora_style)
         # lora_path = f"{COMFYUI_LORAS_DIR}/{lora_filename}" if lora_filename else None
         # inferred_model_type = "14b"
@@ -261,7 +263,7 @@ class Predictor():
 # -------------------------------------------------------------
 #  RunPod Handler
 # -------------------------------------------------------------
-logger = RunPodLogger()
+
 
 predictor = None
 
