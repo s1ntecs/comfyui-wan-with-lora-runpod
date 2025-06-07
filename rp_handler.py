@@ -9,7 +9,7 @@ import torch
 from comfyui import ComfyUI
 
 import runpod
-from runpod.serverless.utils.rp_download import file
+from runpod.serverless.utils.rp_download import file as rp_file
 from runpod.serverless.modules.rp_logger import RunPodLogger
 import random
 
@@ -215,7 +215,7 @@ class Predictor():
     ) -> str:
         self.comfyUI.cleanup(ALL_DIRECTORIES)
         
-        image_obj = file(image_url)
+        image_obj = rp_file(image_url)
         image_path = Path(image_obj["file_path"])
         
         if seed is None:

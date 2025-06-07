@@ -127,6 +127,10 @@ class ComfyUI:
         weights_to_download = list(set(weights_to_download))
 
         for weight in weights_to_download:
+            # target = os.path.join("ComfyUI/models", weight)
+            # if os.path.exists(target):
+            #     print(f"✔ Используем уже скачанный {weight}")
+            #     continue
             self.weights_downloader.download_weights(weight)
 
         print("====================================")
