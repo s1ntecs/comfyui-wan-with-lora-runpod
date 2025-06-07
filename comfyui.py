@@ -89,6 +89,7 @@ class ComfyUI:
         if weights_to_download is None:
             weights_to_download = []
 
+        
         print("Checking weights")
         embeddings = self.weights_downloader.get_weights_by_type("EMBEDDINGS")
         embedding_to_fullname = {emb.split(".")[0]: emb for emb in embeddings}
@@ -125,15 +126,36 @@ class ComfyUI:
                         weights_to_download.append(weight_str)
 
         weights_to_download = list(set(weights_to_download))
+        print(f"Found {len(weights_to_download)} weights to download")
+        model_dirs = [
+            "ComfyUI/models/diffusion_models",
+            "ComfyUI/models/text_encoders",
+            "ComfyUI/models/vae",
+            "ComfyUI/models/clip_vision",
+        ]
 
         for weight in weights_to_download:
-            # target = os.path.join("ComfyUI/models", weight)
-            # if os.path.exists(target):
-            #     print(f"✔ Используем уже скачанный {weight}")
-            #     continue
+            # проверяем, есть ли вес уже в одном из каталогов
+            already = any(
+                os.path.isfile(os.path.join(d, weight))
+                for d in model_dirs
+            )
+            if already:
+                print(f"✔ {weight} уже загружен, пропускаем")
+                continue
+
+            print(f"⏳ Скачиваем {weight} …")
             self.weights_downloader.download_weights(weight)
 
         print("====================================")
+        # for weight in weights_to_download:
+        #     # target = os.path.join("ComfyUI/models", weight)
+        #     # if os.path.exists(target):
+        #     #     print(f"✔ Используем уже скачанный {weight}")
+        #     #     continue
+        #     self.weights_downloader.download_weights(weight)
+
+        # print("====================================")
 
     def is_image_or_video_value(self, value):
         filetypes = [".png", ".jpg", ".jpeg", ".webp", ".mp4", ".webm"]
