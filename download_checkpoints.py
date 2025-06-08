@@ -11,7 +11,7 @@ REPO_ID = "Comfy-Org/Wan_2.1_ComfyUI_repackaged"
 # Список файлов для скачивания: (путь внутри репозитория, локальная папка для сохранения)
 FILES_TO_DOWNLOAD = [
     # Уже существующий файл из примера
-    ("split_files/diffusion_models/wan2.1_i2v_480p_14B_fp16.safetensors", "ComfyUI/models/diffusion_models"),
+    # ("split_files/diffusion_models/wan2.1_i2v_480p_14B_fp16.safetensors", "ComfyUI/models/diffusion_models"),
     ("split_files/diffusion_models/wan2.1_i2v_480p_14B_bf16.safetensors", "ComfyUI/models/diffusion_models"),
     # Новые файлы для ComfyUI
     ("split_files/text_encoders/umt5_xxl_fp16.safetensors",   "ComfyUI/models/text_encoders"),
