@@ -29,7 +29,11 @@ STYLE_NAMES = {
     "Catify_video": "wan_SmNmRmC.safetensors",
     "Live_photo": "wan_SmNmRmC.safetensors",
     "colorizer_video": "wan_SmNmRmC.safetensors",
-    "Dogify_video": "wan_SmNmRmC.safetensors"
+    "Dogify_video": "wan_SmNmRmC.safetensors",
+    "boxing_video": "boxing_10_epochs.safetensors",
+    "angry_video": "angry_face_5_epochs.safetensors",
+    "kiss_cam_video": "kiss_you_V2_wan_comfy.safetensors",
+    "assasin_video": "assassin_45_epochs.safetensors"
 }
 
 STYLE_URLS = {
@@ -63,7 +67,11 @@ STYLE_URLS = {
     "Catify_video": "https://huggingface.co/Remade-AI/Mona-Lisa/blob/main/wan_SmNmRmC.safetensors",
     "Live_photo": "https://huggingface.co/Remade-AI/Mona-Lisa/blob/main/wan_SmNmRmC.safetensors",
     "colorizer_video": "https://huggingface.co/Remade-AI/Mona-Lisa/blob/main/wan_SmNmRmC.safetensors",
-    "Dogify_video": "https://huggingface.co/Remade-AI/Mona-Lisa/blob/main/wan_SmNmRmC.safetensors"
+    "Dogify_video": "https://huggingface.co/Remade-AI/Mona-Lisa/blob/main/wan_SmNmRmC.safetensors",
+    "boxing_video": "https://huggingface.co/sintecs/wan_loras/blob/main/boxing_10_epochs.safetensors",
+    "angry_video": "https://huggingface.co/sintecs/wan_loras/blob/main/angry_face_5_epochs.safetensors",
+    "kiss_cam_video": "https://huggingface.co/sintecs/wan_loras/blob/main/kiss_you_V2_wan_comfy.safetensors",
+    "assasin_video": "https://huggingface.co/sintecs/wan_loras/blob/main/assassin_45_epochs.safetensors"
 }
 
 STYLE_URLS_UNIQUE = {
@@ -87,4 +95,8 @@ STYLE_URLS_UNIQUE = {
     "boobs_video": "https://huggingface.co/sintecs/wan_loras/blob/main/96774d10-5c2a-4904-862e-215d573300e5.safetensors",
     "walk_back_video": "https://huggingface.co/Isi99999/Wan2.1_14B-480p_I2V_LoRAs/blob/main/walking_from_behind.safetensors",
     "serf_video": "https://huggingface.co/sintecs/wan_loras/blob/main/wan_SmNmRmC.safetensors",
+    "boxing_video": "https://huggingface.co/sintecs/wan_loras/blob/main/boxing_10_epochs.safetensors",
+    "angry_video": "https://huggingface.co/sintecs/wan_loras/blob/main/angry_face_5_epochs.safetensors",
+    "kiss_cam_video": "https://huggingface.co/sintecs/wan_loras/blob/main/kiss_you_V2_wan_comfy.safetensors",
+    "assasin_video": "https://huggingface.co/sintecs/wan_loras/blob/main/assassin_45_epochs.safetensors"
 }
