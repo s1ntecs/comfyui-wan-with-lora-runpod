@@ -50,11 +50,11 @@ class Predictor():
             workflow = json.loads(file.read())
         self.comfyUI.handle_weights(
             workflow,
-            # weights_to_download=[
-            #     "wan_2.1_vae.safetensors",
-            #     "umt5_xxl_fp16.safetensors",
-            #     "clip_vision_h.safetensors",
-            # ],
+            weights_to_download=[
+                "wan_2.1_vae.safetensors",
+                "umt5_xxl_fp16.safetensors",
+                "clip_vision_h.safetensors",
+            ],
         )
 
     def get_width_and_height(self, resolution: str, aspect_ratio: str):
