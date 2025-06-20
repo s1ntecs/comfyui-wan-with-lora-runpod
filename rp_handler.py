@@ -37,6 +37,8 @@ MODEL_FRAME_RATE = 16
 # Будем хранить текущий активный стиль и путь
 CURRENT_LORA_NAME = "./loras/wan_SmNmRmC.safetensors"
 logger = RunPodLogger()
+
+
 class Predictor():
     def setup(self):
         self.comfyUI = ComfyUI("127.0.0.1:8188")
@@ -45,14 +47,14 @@ class Predictor():
         os.makedirs("ComfyUI/models/loras", exist_ok=True)
 
         with open(api_json_file, "r") as file:
-            workflow = json.loads(file.read()) 
+            workflow = json.loads(file.read())
         self.comfyUI.handle_weights(
             workflow,
-            weights_to_download=[
-                "wan_2.1_vae.safetensors",
-                "umt5_xxl_fp16.safetensors",
-                "clip_vision_h.safetensors",
-            ],
+            # weights_to_download=[
+            #     "wan_2.1_vae.safetensors",
+            #     "umt5_xxl_fp16.safetensors",
+            #     "clip_vision_h.safetensors",
+            # ],
         )
 
     def get_width_and_height(self, resolution: str, aspect_ratio: str):
@@ -214,10 +216,10 @@ class Predictor():
         seed: int | None = None,
     ) -> str:
         self.comfyUI.cleanup(ALL_DIRECTORIES)
-        
+
         image_obj = rp_file(image_url)
         image_path = Path(image_obj["file_path"])
-        
+
         if seed is None:
             seed = random.randint(0, 2**32 - 1)
 
@@ -225,7 +227,7 @@ class Predictor():
         # image_filename = self.filename_with_extension(image_path, "image")
         image_filename = image_path.name
         logger.info(f"Image filename: {image_filename}")
-        
+
         lora_filename = STYLE_NAMES.get(lora_style)
         # lora_path = f"{COMFYUI_LORAS_DIR}/{lora_filename}" if lora_filename else None
         # inferred_model_type = "14b"
@@ -255,7 +257,7 @@ class Predictor():
         self.comfyUI.connect()
         self.comfyUI.run_workflow(wf)
 
-        files =  self.comfyUI.get_files(OUTPUT_DIR, file_extensions=["mp4"])
+        files = self.comfyUI.get_files(OUTPUT_DIR, file_extensions=["mp4"])
         with open(files[0], "rb") as f:
             video_bytes = f.read()
         video_b64 = base64.b64encode(video_bytes).decode("utf-8")
@@ -284,7 +286,6 @@ def handler(job):
 
         # Скачиваем входное изображение
         image_url = payload["image_url"]
-        
 
         prompt = payload["prompt"]
         negative_prompt = payload.get("negative_prompt", "")
@@ -292,7 +293,6 @@ def handler(job):
         aspect_ratio = payload.get("aspect_ratio", "16:9")
         frames = payload.get("frames", 81)
         model = payload.get("model", "14b-i2v-480p")
-        resolution = payload.get("resolution", "480p")
         lora_strength_clip = payload.get("lora_strength_clip", 1.0)
         fast_mode = payload.get("fast_mode", "Balanced")
         num_inference_steps = payload.get("num_inference_steps", 28)
