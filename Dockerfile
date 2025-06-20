@@ -1,6 +1,7 @@
 # Используем базовый образ RunPod с Python 3.12 и CUDA 12.1
-FROM runpod/pytorch:2.4.0-py3.12-cuda12.1-devel-ubuntu22.04
-
+# FROM runpod/pytorch:2.4.0-py3.12-cuda12.4.1-devel-ubuntu22.04
+FROM runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
+# runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
 # Работаем от корня проекта
 WORKDIR /
 
@@ -85,7 +86,7 @@ RUN pip install \
 RUN curl -o /usr/local/bin/pget -L "https://github.com/replicate/pget/releases/latest/download/pget_$(uname -s)_$(uname -m)" && \
     chmod +x /usr/local/bin/pget
 
-
+RUN python3 install_custom_nodes.py
 RUN python3 download_checkpoints.py
 
 COPY --chmod=755 start_standalone.sh /start.sh

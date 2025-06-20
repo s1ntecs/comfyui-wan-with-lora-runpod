@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import urllib.request
 import subprocess
 import threading
@@ -88,6 +89,7 @@ class ComfyUI:
         if weights_to_download is None:
             weights_to_download = []
 
+        
         print("Checking weights")
         embeddings = self.weights_downloader.get_weights_by_type("EMBEDDINGS")
         embedding_to_fullname = {emb.split(".")[0]: emb for emb in embeddings}
@@ -124,11 +126,36 @@ class ComfyUI:
                         weights_to_download.append(weight_str)
 
         weights_to_download = list(set(weights_to_download))
+        print(f"Found {len(weights_to_download)} weights to download")
+        model_dirs = [
+            "ComfyUI/models/diffusion_models",
+            "ComfyUI/models/text_encoders",
+            "ComfyUI/models/vae",
+            "ComfyUI/models/clip_vision",
+        ]
 
         for weight in weights_to_download:
+            # проверяем, есть ли вес уже в одном из каталогов
+            already = any(
+                os.path.isfile(os.path.join(d, weight))
+                for d in model_dirs
+            )
+            if already:
+                print(f"✔ {weight} уже загружен, пропускаем")
+                continue
+
+            print(f"⏳ Скачиваем {weight} …")
             self.weights_downloader.download_weights(weight)
 
         print("====================================")
+        # for weight in weights_to_download:
+        #     # target = os.path.join("ComfyUI/models", weight)
+        #     # if os.path.exists(target):
+        #     #     print(f"✔ Используем уже скачанный {weight}")
+        #     #     continue
+        #     self.weights_downloader.download_weights(weight)
+
+        # print("====================================")
 
     def is_image_or_video_value(self, value):
         filetypes = [".png", ".jpg", ".jpeg", ".webp", ".mp4", ".webm"]
@@ -343,16 +370,16 @@ class ComfyUI:
             for f in os.listdir(directory):
                 if f == "__MACOSX":
                     continue
-                path = os.path.join(directory, f)
+                path = Path(os.path.join(directory, f))
                 if os.path.isfile(path):
                     print(f"{prefix}{f}")
-                    files.append(Path(path))
+                    files.append(path)
                 elif os.path.isdir(path):
                     print(f"{prefix}{f}/")
                     files.extend(self.get_files(path, prefix=f"{prefix}{f}/"))
 
         if file_extensions:
-            files = [f for f in files if f.name.split(".")[-1] in file_extensions]
+            files: list[Path] = [f for f in files if f.name.split(".")[-1] in file_extensions]
 
         return sorted(files)
 

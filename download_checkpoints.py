@@ -7,10 +7,12 @@ from  styles import STYLE_URLS_UNIQUE
 # Репозиторий на Hugging Face
 REPO_ID = "Comfy-Org/Wan_2.1_ComfyUI_repackaged"
 
+# wan2.1_i2v_480p_14B_bf16
 # Список файлов для скачивания: (путь внутри репозитория, локальная папка для сохранения)
 FILES_TO_DOWNLOAD = [
     # Уже существующий файл из примера
-    ("split_files/diffusion_models/wan2.1_i2v_480p_14B_fp16.safetensors", "ComfyUI/models/diffusion_models"),
+    # ("split_files/diffusion_models/wan2.1_i2v_480p_14B_fp16.safetensors", "ComfyUI/models/diffusion_models"),
+    ("split_files/diffusion_models/wan2.1_i2v_480p_14B_bf16.safetensors", "ComfyUI/models/diffusion_models"),
     # Новые файлы для ComfyUI
     ("split_files/text_encoders/umt5_xxl_fp16.safetensors",   "ComfyUI/models/text_encoders"),
     ("split_files/vae/wan_2.1_vae.safetensors",               "ComfyUI/models/vae"),
@@ -50,7 +52,7 @@ def download_loras():
             local_path = hf_hub_download(
                 repo_id=repo_id,
                 filename=filename,
-                local_dir="./loras"
+                local_dir="./ComfyUI/models/loras"
             )
             downloaded_paths.append(local_path)
         except Exception as e:
@@ -62,3 +64,4 @@ def download_loras():
 
 if __name__ == "__main__":
     download_wan_files()
+    download_loras()
