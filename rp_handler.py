@@ -46,8 +46,10 @@ class Predictor():
 
         os.makedirs("ComfyUI/models/loras", exist_ok=True)
 
-        # with open(api_json_file, "r") as file:
-        #     workflow = json.loads(file.read())
+        with open(api_json_file, "r") as file:
+            workflow = json.loads(file.read())
+        self.comfyUI.load_workflow(workflow,
+                                   check_weights=True)
         # self.comfyUI.handle_weights(
         #     workflow,
         #     weights_to_download=[
@@ -255,6 +257,7 @@ class Predictor():
             resolution="480p",
             image_filename=image_filename
         )
+        logger.info("Workflow updated with new parameters")
 
         wf = self.comfyUI.load_workflow(workflow, check_weights=False)
         self.comfyUI.connect()

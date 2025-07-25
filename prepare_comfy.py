@@ -1,22 +1,36 @@
 #!/usr/bin/env python3
+import os, json, shutil
+from pathlib import Path
 from comfyui import ComfyUI
 
+SPLIT_DIR = Path("ComfyUI/models/split_files/diffusion_models")
+TARGET_DIR = Path("ComfyUI/models/diffusion_models")
 
-with open("workflow.json", "r") as file:
-    WORKFLOW_JSON = file.read()
+
+with open("workflow.json") as f:
+    WORKFLOW = json.load(f)
 
 
-def download_comfy():
-    """Если у тебя в helpers.comfyui есть метод предзагрузки — вызываем корректно."""
-    comfy = ComfyUI("127.0.0.1:8188")
-    # Заметка: у тебя было `comfyUI.download_pre_start_models` без вызова.
-    if hasattr(comfy, "load_workflow"):
-        comfy.load_workflow(WORKFLOW_JSON,
-                            check_inputs=False)
-    else:
-        # либо просто заглушка
-        pass
+def mirror_split_files():
+    """Копирует или линкует файлы UNet из split_files → diffusion_models."""
+    if not SPLIT_DIR.exists():
+        return
+    TARGET_DIR.mkdir(parents=True, exist_ok=True)
+    for src in SPLIT_DIR.iterdir():
+        if src.is_file():
+            dst = TARGET_DIR / src.name
+            if not dst.exists():          # не дублируем
+                try:
+                    os.link(src, dst)     # жёсткая ссылка — ноль копий
+                except OSError:
+                    shutil.copy2(src, dst)
+
+
+def preload_weights():
+    c = ComfyUI("127.0.0.1:8188")         # адрес не важен, соединяться не будем
+    c.load_workflow(WORKFLOW, check_inputs=False)  # качаем всё указанное в JSON
+    mirror_split_files()                  # и «выравниваем» пути
 
 
 if __name__ == "__main__":
-    download_comfy()
+    preload_weights()

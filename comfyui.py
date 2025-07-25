@@ -177,6 +177,7 @@ class ComfyUI:
 
             if "inputs" in node:
                 for input_key, input_value in node["inputs"].items():
+
                     if isinstance(input_value, str) and input_value not in seen_inputs:
                         seen_inputs.add(input_value)
                         if input_value.startswith(("http://", "https://")):
