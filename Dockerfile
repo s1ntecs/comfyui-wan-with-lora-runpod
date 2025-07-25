@@ -92,6 +92,7 @@ RUN curl -o /usr/local/bin/pget -L "https://github.com/replicate/pget/releases/l
 
 RUN python3 install_custom_nodes.py
 RUN python3 download_checkpoints.py
+RUN python3 prepare_comfy.py
 
 COPY --chmod=755 start_standalone.sh /start.sh
 

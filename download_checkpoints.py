@@ -82,4 +82,4 @@ def download_comfy():
 if __name__ == "__main__":
     download_wan_files()
     download_loras()
-    download_comfy()
+    # download_comfy()
