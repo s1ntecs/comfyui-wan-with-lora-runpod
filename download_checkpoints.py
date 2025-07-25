@@ -2,10 +2,15 @@
 import os
 from huggingface_hub import hf_hub_download
 
-from  styles import STYLE_URLS_UNIQUE
+from comfyui import ComfyUI
+from styles import STYLE_URLS_UNIQUE
+
 
 # Репозиторий на Hugging Face
 REPO_ID = "Comfy-Org/Wan_2.1_ComfyUI_repackaged"
+
+with open("workflow.json", "r") as file:
+    WORKFLOW_JSON = file.read()
 
 # wan2.1_i2v_480p_14B_bf16
 # Список файлов для скачивания: (путь внутри репозитория, локальная папка для сохранения)
@@ -18,6 +23,7 @@ FILES_TO_DOWNLOAD = [
     ("split_files/vae/wan_2.1_vae.safetensors",               "./ComfyUI/models/vae"),
     ("split_files/clip_vision/clip_vision_h.safetensors",     "./ComfyUI/models/clip_vision"),
 ]
+
 
 def download_wan_files():
     """
@@ -62,6 +68,18 @@ def download_loras():
     return downloaded_paths
 
 
+def download_comfy():
+    """Если у тебя в helpers.comfyui есть метод предзагрузки — вызываем корректно."""
+    comfy = ComfyUI("127.0.0.1:8188")
+    # Заметка: у тебя было `comfyUI.download_pre_start_models` без вызова.
+    if hasattr(comfy, "load_workflow"):
+        comfy.load_workflow(WORKFLOW_JSON)
+    else:
+        # либо просто заглушка
+        pass
+
+
 if __name__ == "__main__":
     download_wan_files()
     download_loras()
+    download_comfy()

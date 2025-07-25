@@ -229,6 +229,9 @@ class Predictor():
         logger.info(f"Image filename: {image_filename}")
 
         lora_filename = STYLE_NAMES.get(lora_style)
+
+        logger.info(f"Using LoRA: {lora_filename}")
+
         # lora_path = f"{COMFYUI_LORAS_DIR}/{lora_filename}" if lora_filename else None
         # inferred_model_type = "14b"
         with open(api_json_file, "r") as file:
@@ -286,6 +289,7 @@ def handler(job):
 
         # Скачиваем входное изображение
         image_url = payload["image_url"]
+        logger.info(f"Image URL: {image_url}")
 
         prompt = payload["prompt"]
         negative_prompt = payload.get("negative_prompt", "")
