@@ -16,7 +16,6 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends ffmpeg && \
     rm -rf /var/lib/apt/lists/
 # Копируем все файлы из текущей директории в контейнер
-COPY requirements.txt /requirements.txt
 
 # Устанавливаем Python-зависимости из списка
 RUN pip install \
