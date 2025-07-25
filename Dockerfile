@@ -89,10 +89,11 @@ RUN pip install \
 RUN curl -o /usr/local/bin/pget -L "https://github.com/replicate/pget/releases/latest/download/pget_$(uname -s)_$(uname -m)" && \
     chmod +x /usr/local/bin/pget
 
-COPY install_custom_nodes.py download_checkpoints.py prepare_comfy.py custom_nodes.json /
+COPY install_custom_nodes.py download_checkpoints.py prepare_comfy.py custom_nodes.json workflow.json /
 
 RUN python3 install_custom_nodes.py
 RUN python3 download_checkpoints.py
+
 RUN python3 prepare_comfy.py
 
 COPY . /
