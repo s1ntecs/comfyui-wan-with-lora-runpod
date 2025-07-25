@@ -6,15 +6,15 @@ FROM runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
 WORKDIR /
 
 # Обновляем пакеты и устанавливаем системную зависимость ffmpeg
-RUN apt-get update && \
-    apt upgrade -y && \
-    apt-get install -y ffmpeg && \
-    rm -rf /var/lib/apt/lists/*
-
-# RUN rm -f /etc/apt/sources.list.d/cuda-ubuntu*.list
 # RUN apt-get update && \
-#     apt-get install -y --no-install-recommends ffmpeg && \
-#     rm -rf /var/lib/apt/lists/
+#     apt upgrade -y && \
+#     apt-get install -y ffmpeg && \
+#     rm -rf /var/lib/apt/lists/*
+
+RUN rm -f /etc/apt/sources.list.d/cuda-ubuntu*.list
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ffmpeg && \
+    rm -rf /var/lib/apt/lists/
 # Копируем все файлы из текущей директории в контейнер
 
 # Устанавливаем Python-зависимости из списка

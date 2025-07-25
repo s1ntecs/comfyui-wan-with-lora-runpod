@@ -46,16 +46,16 @@ class Predictor():
 
         os.makedirs("ComfyUI/models/loras", exist_ok=True)
 
-        with open(api_json_file, "r") as file:
-            workflow = json.loads(file.read())
-        self.comfyUI.handle_weights(
-            workflow,
-            weights_to_download=[
-                "wan_2.1_vae.safetensors",
-                "umt5_xxl_fp16.safetensors",
-                "clip_vision_h.safetensors",
-            ],
-        )
+        # with open(api_json_file, "r") as file:
+        #     workflow = json.loads(file.read())
+        # self.comfyUI.handle_weights(
+        #     workflow,
+        #     weights_to_download=[
+        #         "wan_2.1_vae.safetensors",
+        #         "umt5_xxl_fp16.safetensors",
+        #         "clip_vision_h.safetensors",
+        #     ],
+        # )
 
     def get_width_and_height(self, resolution: str, aspect_ratio: str):
         sizes = {
@@ -256,7 +256,7 @@ class Predictor():
             image_filename=image_filename
         )
 
-        wf = self.comfyUI.load_workflow(workflow)
+        wf = self.comfyUI.load_workflow(workflow, check_weights=False)
         self.comfyUI.connect()
         self.comfyUI.run_workflow(wf)
 
@@ -272,7 +272,7 @@ class Predictor():
 
 predictor = None
 
-if torch.cuda.is_available():
+if torch.cuda.is_available() and predictor is None:
     print("Current CUDA device:", torch.cuda.current_device())
     print("Device name:", torch.cuda.get_device_name(torch.cuda.current_device()))
     predictor = Predictor()

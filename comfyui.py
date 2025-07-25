@@ -89,7 +89,6 @@ class ComfyUI:
         if weights_to_download is None:
             weights_to_download = []
 
-        
         print("Checking weights")
         embeddings = self.weights_downloader.get_weights_by_type("EMBEDDINGS")
         embedding_to_fullname = {emb.split(".")[0]: emb for emb in embeddings}
@@ -309,7 +308,9 @@ class ComfyUI:
             else:
                 continue
 
-    def load_workflow(self, workflow, check_inputs=True):
+    def load_workflow(self, workflow,
+                      check_inputs=True,
+                      check_weights=True):
         if not isinstance(workflow, dict):
             wf = json.loads(workflow)
         else:
@@ -325,7 +326,8 @@ class ComfyUI:
         self.handle_known_unsupported_nodes(wf)
         if check_inputs:
             self.handle_inputs(wf)
-        self.handle_weights(wf)
+        if check_weights:
+            self.handle_weights(wf)
         return wf
 
     def reset_execution_cache(self):
