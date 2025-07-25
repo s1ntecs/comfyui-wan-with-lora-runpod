@@ -11,7 +11,8 @@ def download_comfy():
     comfy = ComfyUI("127.0.0.1:8188")
     # Заметка: у тебя было `comfyUI.download_pre_start_models` без вызова.
     if hasattr(comfy, "load_workflow"):
-        comfy.load_workflow(WORKFLOW_JSON)
+        comfy.load_workflow(WORKFLOW_JSON,
+                            check_inputs=False)
     else:
         # либо просто заглушка
         pass

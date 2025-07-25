@@ -16,7 +16,7 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends ffmpeg && \
     rm -rf /var/lib/apt/lists/
 # Копируем все файлы из текущей директории в контейнер
-COPY . .
+COPY requirements.txt /requirements.txt
 
 # Устанавливаем Python-зависимости из списка
 RUN pip install \
@@ -90,9 +90,13 @@ RUN pip install \
 RUN curl -o /usr/local/bin/pget -L "https://github.com/replicate/pget/releases/latest/download/pget_$(uname -s)_$(uname -m)" && \
     chmod +x /usr/local/bin/pget
 
+COPY install_custom_nodes.py download_checkpoints.py prepare_comfy.py /
+
 RUN python3 install_custom_nodes.py
 RUN python3 download_checkpoints.py
 RUN python3 prepare_comfy.py
+
+COPY . /
 
 COPY --chmod=755 start_standalone.sh /start.sh
 
