@@ -94,8 +94,7 @@ COPY . /
 
 RUN python3 install_custom_nodes.py
 RUN python3 download_checkpoints.py
-
-RUN python3 prepare_comfy.py
+RUN python3 prepare_comfy.py && python flatten_models.py
 
 # COPY . /
 

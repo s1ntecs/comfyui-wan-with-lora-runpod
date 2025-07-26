@@ -30,7 +30,6 @@ api_json_file = "workflow.json"
 
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-model_id = "Wan-AI/Wan2.1-I2V-14B-480P-Diffusers"
 cache = "./hf_cache"
 MODEL_FRAME_RATE = 16
 
@@ -49,15 +48,8 @@ class Predictor():
         with open(api_json_file, "r") as file:
             workflow = json.loads(file.read())
         self.comfyUI.load_workflow(workflow,
+                                   check_inputs=False,
                                    check_weights=True)
-        # self.comfyUI.handle_weights(
-        #     workflow,
-        #     weights_to_download=[
-        #         "wan_2.1_vae.safetensors",
-        #         "umt5_xxl_fp16.safetensors",
-        #         "clip_vision_h.safetensors",
-        #     ],
-        # )
 
     def get_width_and_height(self, resolution: str, aspect_ratio: str):
         sizes = {
@@ -259,7 +251,8 @@ class Predictor():
         )
         logger.info("Workflow updated with new parameters")
 
-        wf = self.comfyUI.load_workflow(workflow, check_weights=False)
+        wf = self.comfyUI.load_workflow(workflow,
+                                        check_weights=True)
         self.comfyUI.connect()
         self.comfyUI.run_workflow(wf)
 

@@ -121,7 +121,7 @@ class ComfyUI:
                                 f"Converting model synonym {input_value} to {weight_str}"
                             )
                             node["inputs"][input_key] = weight_str
-
+                        print(f"Adding {weight_str} to weights to download")
                         weights_to_download.append(weight_str)
 
         weights_to_download = list(set(weights_to_download))
